@@ -1,0 +1,63 @@
+# Visual Studio / .NET
+**/bin/
+**/obj/
+**/Debug/
+**/Release/
+**/publish/
+**/TestResults/
+*.user
+*.userosscache
+*.suo
+*.sln.docstates
+.vs/
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+.nuget/packages/
+*.nuget.props
+*.nuget.targets
+**/project.assets.json
+**/project.nuget.cache
+
+# Rider / ReSharper / JetBrains
+.idea/
+.Rider*
+.ReSharper*/
+*_Resharper.*
+*.DotSettings.user
+
+# VS Code local settings (keep workspace files if desired)
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+
+# Logs / caches
+*.log
+*.tlog
+*.cache
+*.tmp
+*.temp
+
+# Build artifacts / symbols
+*.pdb
+*.mdb
+*.ilk
+*.obj
+*.pch
+*.ipdb
+*.iobj
+
+# Windows
+Thumbs.db
+Desktop.ini
+
+# Tooling
+.DS_Store
+
+# Local dev settings
+**/Properties/launchSettings.json
+
