@@ -1,6 +1,6 @@
 §SHELL := /bin/sh
 DOTNET ?= dotnet
-PROJECT := RdpManager.csproj
+PROJECT := RdpManager/RdpManager.csproj
 RUNTIME ?= win-x64
 SELF_CONTAINED ?= true
 PUBLISH_DIR ?= publish

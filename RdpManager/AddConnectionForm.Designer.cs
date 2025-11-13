@@ -1,3 +1,4 @@
+using System.Drawing;
 using System.Windows.Forms;
 
 namespace RdpManager
@@ -42,6 +43,11 @@ namespace RdpManager
             this.StartPosition = FormStartPosition.CenterParent;
             this.Width = 460;
             this.Height = 360;
+            var appIcon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+            if (appIcon != null)
+            {
+                this.Icon = appIcon;
+            }
 
             lblName = new Label { Left = 16, Top = 20, Width = 100, Text = "Name:" };
             txtName = new TextBox { Left = 120, Top = 16, Width = 260 };

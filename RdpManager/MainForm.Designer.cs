@@ -1,4 +1,5 @@
 using System.Drawing;
+using System.Reflection;
 using System.Windows.Forms;
 
 namespace RdpManager
@@ -66,6 +67,20 @@ namespace RdpManager
             this.Text = "RDP Manager";
             this.Width = 640;
             this.Height = 480;
+            // Prefer the embedded icon so published single-file builds retain it.
+            using var iconStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("RdpManager.Assets.AppIcon.ico");
+            if (iconStream != null)
+            {
+                this.Icon = new Icon(iconStream);
+            }
+            else
+            {
+                var appIcon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+                if (appIcon != null)
+                {
+                    this.Icon = appIcon;
+                }
+            }
 
             // Main context menu (right-click on empty space)
             mainMenu = new ContextMenuStrip();
