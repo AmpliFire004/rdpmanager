@@ -3,6 +3,8 @@
 RdpManager is a simple RDP connection manager for Windows built with WinForms (.NET).
 
 It provides a lightweight UI to store and launch Remote Desktop (RDP) connections, including a Quick Connect workflow for fast one-off connections.
+## NOTE!!
+I`ve been using AI to code this, mostly for fun. 
 
 ## Key features
 
@@ -22,6 +24,8 @@ If you prefer to build from source, use the .NET SDK and your preferred IDE (Vis
 ## Contributing
 
 Bug reports and pull requests are welcome. Open issues for feature requests or UI suggestions.
+
+
 
 ## License
 
