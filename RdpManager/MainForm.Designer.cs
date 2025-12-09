@@ -28,6 +28,8 @@ namespace RdpManager
         private ToolStripMenuItem menuFile;
         private ToolStripMenuItem menuEdit;
         private ToolStripMenuItem menuView;
+        private ToolStripMenuItem menuHelp;
+        private ToolStripMenuItem miHelpAbout;
         private ToolStripMenuItem miFileAdd;
         private ToolStripMenuItem miFileQuickConnect;
         private ToolStripMenuItem miFileImport;
@@ -161,6 +163,12 @@ namespace RdpManager
             menuView.DropDownItems.AddRange(new ToolStripItem[] { miViewButtons, miViewList, new ToolStripSeparator(), miViewSort });
 
             menuStrip.Items.AddRange(new ToolStripItem[] { menuFile, menuEdit, menuView });
+            // Help menu (About)
+            menuHelp = new ToolStripMenuItem("Help");
+            miHelpAbout = new ToolStripMenuItem("About");
+            miHelpAbout.Click += (s, e) => { try { ShowAbout(); } catch { } };
+            menuHelp.DropDownItems.Add(miHelpAbout);
+            menuStrip.Items.Add(menuHelp);
             this.MainMenuStrip = menuStrip;
 
             flowConnections = new FlowLayoutPanel();

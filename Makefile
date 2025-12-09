@@ -5,8 +5,8 @@ RUNTIME ?= win-x64
 SELF_CONTAINED ?= true
 PUBLISH_DIR ?= publish
 VERSION ?= 1.0
-FILE_VERSION ?= $(VERSION).0
-ASSEMBLY_VERSION ?= $(VERSION).0
+FILE_VERSION ?= $(VERSION)
+ASSEMBLY_VERSION ?= $(VERSION)
 
 
 .PHONY: all build run clean publish

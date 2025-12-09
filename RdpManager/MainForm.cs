@@ -394,6 +394,20 @@ namespace RdpManager
             }
         }
 
+        // Show About dialog
+        private void ShowAbout()
+        {
+            try
+            {
+                using var dlg = new AboutForm();
+                dlg.ShowDialog(this);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, ex.Message, "About", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
         // Clear persisted quick connect history after confirmation
         private void ClearQuickConnectHistory()
         {
