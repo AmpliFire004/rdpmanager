@@ -11,6 +11,7 @@ namespace RdpManager
         public AddConnectionForm()
         {
             InitializeComponent();
+            try { numPort.Value = 3389; } catch { }
         }
 
         public AddConnectionForm(Connection existing)
@@ -24,7 +25,6 @@ namespace RdpManager
 
             if (existing.Port.HasValue)
             {
-                chkUsePort.Checked = true; // enables numPort via handler
                 try { numPort.Value = Math.Min(Math.Max(existing.Port.Value, (int)numPort.Minimum), (int)numPort.Maximum); } catch { }
             }
 
@@ -33,10 +33,24 @@ namespace RdpManager
 
             if (existing.ScreenWidth.HasValue && existing.ScreenHeight.HasValue)
             {
-                chkCustomRes.Checked = true; // enables width/height via handler
-                try { numWidth.Value = Math.Min(Math.Max(existing.ScreenWidth.Value, (int)numWidth.Minimum), (int)numWidth.Maximum); } catch { }
-                try { numHeight.Value = Math.Min(Math.Max(existing.ScreenHeight.Value, (int)numHeight.Minimum), (int)numHeight.Maximum); } catch { }
+                // Try to select a matching resolution preset, otherwise add it
+                var sel = $"{existing.ScreenWidth.Value}x{existing.ScreenHeight.Value}";
+                var idx = cbResolution.Items.IndexOf(sel);
+                if (idx >= 0) cbResolution.SelectedIndex = idx;
+                else
+                {
+                    // Insert custom resolution after Fullscreen
+                    cbResolution.Items.Insert(1, sel);
+                    cbResolution.SelectedIndex = 1;
+                }
             }
+            else
+            {
+                // keep default Fullscreen
+                try { cbResolution.SelectedIndex = 0; } catch { }
+            }
+
+            // no SSH key field in RDP-only build
         }
 
         private void btnOk_Click(object? sender, EventArgs e)
@@ -55,12 +69,26 @@ namespace RdpManager
                 return;
             }
 
-            int? port = numPort.Enabled ? (int?)Convert.ToInt32(numPort.Value) : null;
+            int? port = (int?)Convert.ToInt32(numPort.Value);
             var domain = string.IsNullOrWhiteSpace(txtDomain.Text) ? null : txtDomain.Text.Trim();
             var username = string.IsNullOrWhiteSpace(txtUsername.Text) ? null : txtUsername.Text.Trim();
-            int? width = (chkCustomRes.Checked && numWidth.Enabled) ? (int?)Convert.ToInt32(numWidth.Value) : null;
-            int? height = (chkCustomRes.Checked && numHeight.Enabled) ? (int?)Convert.ToInt32(numHeight.Value) : null;
-
+            int? width = null;
+            int? height = null;
+            try
+            {
+                // Use selected item or the typed text so custom resolutions are supported
+                var sel = cbResolution.SelectedItem?.ToString() ?? cbResolution.Text ?? "Fullscreen";
+                if (!string.Equals(sel, "Fullscreen", StringComparison.OrdinalIgnoreCase))
+                {
+                    var parts = sel.Split('x');
+                    if (parts.Length == 2 && int.TryParse(parts[0], out var w) && int.TryParse(parts[1], out var h))
+                    {
+                        width = w;
+                        height = h;
+                    }
+                }
+            }
+            catch { }
             NewConnection = new Connection
             {
                 Name = name,
@@ -70,6 +98,7 @@ namespace RdpManager
                 Username = username,
                 ScreenWidth = width,
                 ScreenHeight = height
+                
             };
 
             this.DialogResult = DialogResult.OK;

@@ -9,12 +9,9 @@ namespace RdpManager
         private TextBox txtName;
         private TextBox txtAddress;
         private NumericUpDown numPort;
-        private CheckBox chkUsePort;
         private TextBox txtDomain;
         private TextBox txtUsername;
-        private NumericUpDown numWidth;
-        private NumericUpDown numHeight;
-        private CheckBox chkCustomRes;
+        private ComboBox cbResolution;
         private Button btnOk;
         private Button btnCancel;
         private Label lblName;
@@ -49,39 +46,50 @@ namespace RdpManager
                 this.Icon = appIcon;
             }
 
-            lblName = new Label { Left = 16, Top = 20, Width = 100, Text = "Name:" };
-            txtName = new TextBox { Left = 120, Top = 16, Width = 260 };
+            lblName = new Label { Left = 16, Top = 16, Width = 100, Text = "Name:" };
+            txtName = new TextBox { Left = 120, Top = 12, Width = 320, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
 
-            lblAddress = new Label { Left = 16, Top = 60, Width = 100, Text = "Address:" };
-            txtAddress = new TextBox { Left = 120, Top = 56, Width = 260, PlaceholderText = "hostname or IP" };
+            lblAddress = new Label { Left = 16, Top = 56, Width = 100, Text = "Address:" };
+            txtAddress = new TextBox { Left = 120, Top = 52, Width = 320, PlaceholderText = "hostname or IP", Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
 
-            lblPort = new Label { Left = 16, Top = 100, Width = 100, Text = "Port (opt):" };
-            numPort = new NumericUpDown { Left = 120, Top = 96, Width = 100, Minimum = 0, Maximum = 65535, Value = 3389 };
-            chkUsePort = new CheckBox { Left = 230, Top = 98, Text = "Use custom port" };
-            chkUsePort.CheckedChanged += (s, e) => numPort.Enabled = chkUsePort.Checked;
-            numPort.Enabled = false;
+            lblPort = new Label { Left = 16, Top = 216, Width = 100, Text = "Port:" };
+            numPort = new NumericUpDown { Left = 120, Top = 212, Width = 100, Minimum = 1, Maximum = 65535, Value = 3389 };
 
-            lblDomain = new Label { Left = 16, Top = 140, Width = 100, Text = "Domain (opt):" };
-            txtDomain = new TextBox { Left = 120, Top = 136, Width = 120 };
+            lblDomain = new Label { Left = 16, Top = 96, Width = 100, Text = "Domain:" };
+            txtDomain = new TextBox { Left = 120, Top = 92, Width = 180, Anchor = AnchorStyles.Top | AnchorStyles.Left };
 
-            lblUsername = new Label { Left = 248, Top = 140, AutoSize = true, Text = "User (opt):" };
-            txtUsername = new TextBox { Left = 320, Top = 136, Width = 120 };
+            // Make the Domain and User fields shorter so they fit nicely.
+            // Place the User field under the Domain field to improve layout.
+            lblUsername = new Label { Left = 16, Top = 136, Width = 100, Text = "User:" };
+            txtUsername = new TextBox { Left = 120, Top = 132, Width = 180, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
 
-            lblResolution = new Label { Left = 16, Top = 180, Width = 100, Text = "Resolution:" };
-            chkCustomRes = new CheckBox { Left = 120, Top = 178, Width = 140, Text = "Use custom size" };
-            numWidth = new NumericUpDown { Left = 260, Top = 176, Width = 80, Minimum = 640, Maximum = 10000, Value = 1920 };
-            var lblX = new Label { Left = 345, Top = 180, Width = 10, Text = "x" };
-            numHeight = new NumericUpDown { Left = 360, Top = 176, Width = 80, Minimum = 480, Maximum = 10000, Value = 1080 };
-            chkCustomRes.CheckedChanged += (s, e) =>
+            // Move resolution down below the user row so the form feels balanced.
+            lblResolution = new Label { Left = 16, Top = 176, Width = 100, Text = "Resolution:" };
+            // Allow typing custom resolutions
+            cbResolution = new ComboBox { Left = 120, Top = 172, Width = 320, DropDownStyle = ComboBoxStyle.DropDown, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
+            var resolutions = new string[]
             {
-                numWidth.Enabled = chkCustomRes.Checked;
-                numHeight.Enabled = chkCustomRes.Checked;
+                "Fullscreen",
+                "800x600",
+                "1024x768",
+                "1280x720",
+                "1280x800",
+                "1366x768",
+                "1440x900",
+                "1600x900",
+                "1920x1080",
+                "2560x1440",
+                "3840x2160"
             };
-            numWidth.Enabled = false;
-            numHeight.Enabled = false;
+            foreach (var r in resolutions) cbResolution.Items.Add(r);
+            cbResolution.SelectedIndex = 0;
 
-            btnOk = new Button { Text = "OK", Left = 280, Width = 75, Top = 240, DialogResult = DialogResult.OK };
-            btnCancel = new Button { Text = "Cancel", Left = 365, Width = 75, Top = 240, DialogResult = DialogResult.Cancel };
+            // No protocol selection; only RDP supported here.
+
+            // Add a bit more padding from the right/bottom edges by moving the buttons left and anchoring.
+            // Keep buttons anchored to the bottom-right and positioned at the bottom of the form
+            btnOk = new Button { Text = "OK", Left = 260, Width = 75, Top = 292, DialogResult = DialogResult.OK, Anchor = AnchorStyles.Bottom | AnchorStyles.Right };
+            btnCancel = new Button { Text = "Cancel", Left = 345, Width = 75, Top = 292, DialogResult = DialogResult.Cancel, Anchor = AnchorStyles.Bottom | AnchorStyles.Right };
             btnOk.Click += btnOk_Click;
 
             this.Controls.Add(lblName);
@@ -90,16 +98,12 @@ namespace RdpManager
             this.Controls.Add(txtAddress);
             this.Controls.Add(lblPort);
             this.Controls.Add(numPort);
-            this.Controls.Add(chkUsePort);
             this.Controls.Add(lblDomain);
             this.Controls.Add(txtDomain);
             this.Controls.Add(lblUsername);
             this.Controls.Add(txtUsername);
             this.Controls.Add(lblResolution);
-            this.Controls.Add(chkCustomRes);
-            this.Controls.Add(numWidth);
-            this.Controls.Add(numHeight);
-            this.Controls.Add(lblX);
+            this.Controls.Add(cbResolution);
             this.Controls.Add(btnOk);
             this.Controls.Add(btnCancel);
 

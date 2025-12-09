@@ -329,11 +329,12 @@ namespace RdpManager
             }
         }
 
+        
+
         private void QuickConnect()
         {
             var rawInput = quickConnectTextBox?.Text ?? string.Empty;
             var input = rawInput.Trim();
-            quickConnectHistoryMenu?.Hide();
             if (string.IsNullOrWhiteSpace(input))
             {
                 MessageBox.Show(this, "Enter a hostname or IP to quick connect.", "Quick Connect", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -350,10 +351,77 @@ namespace RdpManager
                 Address = targetHost,
                 Port = port
             };
+            // Apply quick-connect defaults from user settings (username, resolution)
+            try
+            {
+                if (!string.IsNullOrWhiteSpace(_settings.QuickConnectUsername))
+                {
+                    tempConnection.Username = _settings.QuickConnectUsername;
+                }
 
-            LaunchRdp(tempConnection);
+                if (_settings.QuickConnectScreenWidth.HasValue && _settings.QuickConnectScreenHeight.HasValue
+                    && _settings.QuickConnectScreenWidth.Value > 0 && _settings.QuickConnectScreenHeight.Value > 0)
+                {
+                    tempConnection.ScreenWidth = _settings.QuickConnectScreenWidth.Value;
+                    tempConnection.ScreenHeight = _settings.QuickConnectScreenHeight.Value;
+                }
+            }
+            catch { }
+
+                LaunchRdp(tempConnection);
             RememberQuickConnectEntry(input);
             try { quickConnectTextBox?.SelectAll(); } catch { }
+        }
+
+        // Opens the Quick Connect Settings dialog and persists changes
+        private void ShowQuickConnectSettings()
+        {
+            try
+            {
+                using var dlg = new QuickConnectSettingsForm();
+                dlg.LoadSettings(_settings.QuickConnectUsername, _settings.QuickConnectScreenWidth, _settings.QuickConnectScreenHeight);
+                if (dlg.ShowDialog(this) == DialogResult.OK)
+                {
+                    _settings.QuickConnectUsername = dlg.Username;
+                    _settings.QuickConnectScreenWidth = dlg.ScreenWidth;
+                    _settings.QuickConnectScreenHeight = dlg.ScreenHeight;
+                    SaveSettings();
+                }
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, ex.Message, "Quick Connect Settings", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        // Clear persisted quick connect history after confirmation
+        private void ClearQuickConnectHistory()
+        {
+            try
+            {
+                if (_settings.QuickConnectHistory == null || _settings.QuickConnectHistory.Count == 0)
+                {
+                    MessageBox.Show(this, "No quick connect history to clear.", "Clear Quick Connect History", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+
+                var confirm = MessageBox.Show(this,
+                    "Clear quick connect history? This cannot be undone.",
+                    "Clear Quick Connect History",
+                    MessageBoxButtons.YesNo,
+                    MessageBoxIcon.Warning);
+
+                if (confirm != DialogResult.Yes) return;
+
+                _settings.QuickConnectHistory.Clear();
+                SaveSettings();
+                UpdateQuickConnectAutocomplete();
+                MessageBox.Show(this, "Quick connect history cleared.", "Clear Quick Connect History", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, ex.Message, "Clear Quick Connect History", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
         }
 
         private void RememberQuickConnectEntry(string entry)
@@ -374,11 +442,16 @@ namespace RdpManager
         private void UpdateQuickConnectAutocomplete()
         {
             if (quickConnectTextBox == null) return;
+            // Always clear the ComboBox items and autocomplete source so clearing
+            // the history properly empties the control.
+            quickConnectTextBox.Items.Clear();
+            quickConnectTextBox.Text = string.Empty;
             _quickConnectAutoComplete.Clear();
             if (_settings.QuickConnectHistory == null || _settings.QuickConnectHistory.Count == 0) return;
             foreach (var entry in _settings.QuickConnectHistory.Take(10))
             {
                 _quickConnectAutoComplete.Add(entry);
+                quickConnectTextBox.Items.Add(entry);
             }
         }
 
@@ -428,39 +501,16 @@ namespace RdpManager
 
         private void QuickConnectTextBox_Enter(object? sender, EventArgs e)
         {
-            quickConnectTextBox?.SelectAll();
-            ShowQuickConnectHistoryMenu();
-        }
-
-        private void QuickConnectTextBox_MouseDown(object? sender, MouseEventArgs e)
-        {
-            if (e.Button != MouseButtons.Left) return;
-            if (quickConnectHistoryMenu != null && quickConnectHistoryMenu.Visible) return;
-            ShowQuickConnectHistoryMenu();
-        }
-
-        private void QuickConnectHistoryMenu_ItemClicked(object? sender, ToolStripItemClickedEventArgs e)
-        {
             if (quickConnectTextBox == null) return;
-            quickConnectTextBox.Text = e.ClickedItem.Text;
-            quickConnectTextBox.SelectionStart = quickConnectTextBox.Text.Length;
-            quickConnectHistoryMenu?.Hide();
-        }
-
-        private void ShowQuickConnectHistoryMenu()
-        {
-            if (quickConnectTextBox == null || quickConnectHistoryMenu == null) return;
-            if (_settings.QuickConnectHistory == null || _settings.QuickConnectHistory.Count == 0) return;
-            if (quickConnectHistoryMenu.Visible) return;
-
-            quickConnectHistoryMenu.Items.Clear();
-            foreach (var entry in _settings.QuickConnectHistory.Take(10))
+            try
             {
-                quickConnectHistoryMenu.Items.Add(entry);
+                quickConnectTextBox.SelectAll();
+                // Show the dropdown after focus settles so user sees history items
+                BeginInvoke(new Action(() => { try { quickConnectTextBox.DroppedDown = true; } catch { } }));
             }
-            if (quickConnectHistoryMenu.Items.Count == 0) return;
-            quickConnectHistoryMenu.Show(quickConnectTextBox, new Point(0, quickConnectTextBox.Height));
+            catch { }
         }
+        
 
         private void ToggleView(bool isList)
         {

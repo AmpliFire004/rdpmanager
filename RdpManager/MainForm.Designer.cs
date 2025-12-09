@@ -26,6 +26,7 @@ namespace RdpManager
         private ContextMenuStrip listMenu;
         private MenuStrip menuStrip;
         private ToolStripMenuItem menuFile;
+        private ToolStripMenuItem menuEdit;
         private ToolStripMenuItem menuView;
         private ToolStripMenuItem miFileAdd;
         private ToolStripMenuItem miFileQuickConnect;
@@ -41,10 +42,11 @@ namespace RdpManager
         private Panel contentPanel;
         private Panel connectionsPanel;
         private FlowLayoutPanel quickConnectPanel;
-        private TextBox quickConnectTextBox;
+        
+        private ComboBox quickConnectTextBox;
         private Button quickConnectButton;
+        private Label quickConnectHeader;
         private Label connectionListHeader;
-        private ContextMenuStrip quickConnectHistoryMenu;
 
         /// <summary>
         ///  Clean up any resources being used.
@@ -112,7 +114,13 @@ namespace RdpManager
 
             // Menu bar (File/View)
             menuStrip = new MenuStrip();
+            // Ensure menu docks to the top of the window
+            menuStrip.Dock = DockStyle.Top;
+            // Make menu background match the rest of the app
+            menuStrip.BackColor = SystemColors.Window;
+            try { menuStrip.RenderMode = ToolStripRenderMode.System; } catch { }
             menuFile = new ToolStripMenuItem("File");
+            menuEdit = new ToolStripMenuItem("Edit");
             menuView = new ToolStripMenuItem("View");
 
             miFileAdd = new ToolStripMenuItem("Add Connection");
@@ -132,6 +140,14 @@ namespace RdpManager
             miFileExport.Click += (s, e) => ExportConnections();
             menuFile.DropDownItems.AddRange(new ToolStripItem[] { miFileAdd, miFileQuickConnect, new ToolStripSeparator(), miFileImport, miFileExport });
 
+            // Edit menu
+            var miEditQuickConnectSettings = new ToolStripMenuItem("Quick Connect Settings...");
+            miEditQuickConnectSettings.Click += (s, e) => ShowQuickConnectSettings();
+            var miEditClearQuickConnectHistory = new ToolStripMenuItem("Clear Quick Connect History");
+            miEditClearQuickConnectHistory.Click += (s, e) => ClearQuickConnectHistory();
+            menuEdit.DropDownItems.Add(miEditQuickConnectSettings);
+            menuEdit.DropDownItems.Add(miEditClearQuickConnectHistory);
+
             miViewButtons = new ToolStripMenuItem("Buttons View");
             miViewButtons.Click += (s, e) => ToggleView(isList: false);
             miViewList = new ToolStripMenuItem("List View");
@@ -144,7 +160,7 @@ namespace RdpManager
             miViewSort.DropDownItems.AddRange(new ToolStripItem[] { miSortNameAsc, miSortNameDesc, miSortHostAsc, miSortHostDesc });
             menuView.DropDownItems.AddRange(new ToolStripItem[] { miViewButtons, miViewList, new ToolStripSeparator(), miViewSort });
 
-            menuStrip.Items.AddRange(new ToolStripItem[] { menuFile, menuView });
+            menuStrip.Items.AddRange(new ToolStripItem[] { menuFile, menuEdit, menuView });
             this.MainMenuStrip = menuStrip;
 
             flowConnections = new FlowLayoutPanel();
@@ -154,6 +170,7 @@ namespace RdpManager
             flowConnections.WrapContents = true;
             flowConnections.ContextMenuStrip = mainMenu;
             flowConnections.Visible = false;
+            flowConnections.BackColor = SystemColors.Window;
 
             lvConnections = new ListView();
             lvConnections.Dock = DockStyle.Fill;
@@ -161,6 +178,7 @@ namespace RdpManager
             lvConnections.FullRowSelect = true;
             lvConnections.HideSelection = false;
             lvConnections.Visible = true;
+            lvConnections.BackColor = SystemColors.Window;
             colName = new ColumnHeader(); colName.Text = "Name"; colName.Width = 220;
             colHost = new ColumnHeader(); colHost.Text = "Hostname"; colHost.Width = 320;
             lvConnections.Columns.AddRange(new ColumnHeader[] { colName, colHost });
@@ -196,7 +214,8 @@ namespace RdpManager
             quickConnectPanel.AutoSize = false;
             quickConnectPanel.AutoSizeMode = AutoSizeMode.GrowAndShrink;
             quickConnectPanel.FlowDirection = FlowDirection.LeftToRight;
-            quickConnectPanel.BackColor = SystemColors.ControlLightLight;
+            // match the content background so headers/panel don't appear as a different band
+            quickConnectPanel.BackColor = SystemColors.Window;
 
             quickConnectButton = new Button();
             quickConnectButton.Text = "Go";
@@ -206,14 +225,13 @@ namespace RdpManager
             quickConnectButton.Padding = new Padding(10, 2, 10, 2);
             quickConnectButton.Click += (s, e) => QuickConnect();
 
-            quickConnectTextBox = new TextBox();
+            quickConnectTextBox = new ComboBox();
             quickConnectTextBox.Width = 240;
-            quickConnectTextBox.PlaceholderText = "Quick Connect";
             quickConnectTextBox.Margin = new Padding(0, 4, 8, 0);
+            quickConnectTextBox.DropDownStyle = ComboBoxStyle.DropDown;
             quickConnectTextBox.AutoCompleteMode = AutoCompleteMode.SuggestAppend;
             quickConnectTextBox.AutoCompleteSource = AutoCompleteSource.CustomSource;
             quickConnectTextBox.Enter += QuickConnectTextBox_Enter;
-            quickConnectTextBox.MouseDown += QuickConnectTextBox_MouseDown;
             quickConnectTextBox.KeyDown += (s, e) =>
             {
                 if (e.KeyCode == Keys.Enter)
@@ -224,12 +242,10 @@ namespace RdpManager
                 }
             };
 
-            quickConnectHistoryMenu = new ContextMenuStrip(components);
-            quickConnectHistoryMenu.ShowImageMargin = false;
-            quickConnectHistoryMenu.ItemClicked += QuickConnectHistoryMenu_ItemClicked;
-
             quickConnectPanel.Controls.Add(quickConnectTextBox);
             quickConnectPanel.Controls.Add(quickConnectButton);
+
+            // Place header above the quick-connect panel (header is created below)
 
             // Ensure menu is at the top like a normal window
             // Content panel to add spacing below the menu bar
@@ -243,21 +259,46 @@ namespace RdpManager
             connectionListHeader.Dock = DockStyle.Top;
             connectionListHeader.Padding = new Padding(0, 2, 0, 4);
             connectionListHeader.Font = new Font(Font, FontStyle.Bold);
+            connectionListHeader.BackColor = SystemColors.Window;
+
+            // Quick connect header (matches connection list header style)
+            quickConnectHeader = new Label();
+            quickConnectHeader.Text = "Quick Connect";
+            quickConnectHeader.Dock = DockStyle.Top;
+            quickConnectHeader.Padding = new Padding(12, 4, 0, 4);
+            quickConnectHeader.Font = new Font(Font, FontStyle.Bold);
+            quickConnectHeader.BackColor = SystemColors.Window;
 
             connectionsPanel = new Panel();
             connectionsPanel.Dock = DockStyle.Fill;
             connectionsPanel.Padding = new Padding(0, 8, 0, 0); // breathing room under header
+            connectionsPanel.BackColor = SystemColors.Window;
 
             // Add views into content panel
             connectionsPanel.Controls.Add(lvConnections);
             connectionsPanel.Controls.Add(flowConnections);
             contentPanel.Controls.Add(connectionsPanel);
-            contentPanel.Controls.Add(connectionListHeader);
 
-            // Add menu first (top), then content
-            this.Controls.Add(contentPanel);
-            this.Controls.Add(quickConnectPanel);
-            this.Controls.Add(menuStrip);
+            // Use a TableLayoutPanel to enforce exact stacking order and sizing
+            var mainLayout = new TableLayoutPanel();
+            mainLayout.Dock = DockStyle.Fill;
+            mainLayout.BackColor = SystemColors.Window;
+            mainLayout.ColumnCount = 1;
+            mainLayout.RowCount = 5;
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // menu
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // quick connect header
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // quick connect panel
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize)); // list header
+            mainLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100F)); // content
+
+            // Add controls to the layout in the requested order
+            mainLayout.Controls.Add(menuStrip, 0, 0);
+            mainLayout.Controls.Add(quickConnectHeader, 0, 1);
+            mainLayout.Controls.Add(quickConnectPanel, 0, 2);
+            mainLayout.Controls.Add(connectionListHeader, 0, 3);
+            mainLayout.Controls.Add(contentPanel, 0, 4);
+
+            this.Controls.Add(mainLayout);
         }
 
         #endregion
