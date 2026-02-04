@@ -13,5 +13,8 @@ namespace RdpManager.Models
         public string? QuickConnectUsername { get; set; }
         public int? QuickConnectScreenWidth { get; set; }
         public int? QuickConnectScreenHeight { get; set; }
+        // Tab management
+        public List<string> Tabs { get; set; } = new() { "General" };
+        public string SelectedTab { get; set; } = "General";
     }
 }

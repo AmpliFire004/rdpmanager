@@ -8,6 +8,7 @@ I`ve been using AI to code this, mostly for fun.
 
 ## Key features
 
+- **Tab Organization**: Organize connections into different tabs for better management (add, rename, remove tabs)
 - Quick Connect: editable dropdown with typed input, history, and autocomplete.
 - Quick Connect Settings: set a default username and preferred resolution for quick connects.
 - Add Connection dialog: name/address, domain/user, resolution presets (including "Fullscreen") and editable custom resolutions; port defaults to 3389.

@@ -63,31 +63,47 @@ namespace RdpManager
                 string? fileVersion = null;
 
                 // Try to locate the running executable path. For single-file published apps
-                // `Assembly.Location` may be empty; use the process main module filename first.
+                // use AppContext.BaseDirectory as the primary approach since Assembly.Location
+                // may be empty.
                 try
                 {
                     string? exePath = null;
+                    // For single-file apps, AppContext.BaseDirectory is more reliable
+                    exePath = AppContext.BaseDirectory;
+
+                    // Try to get the actual executable path if possible
                     try
                     {
-                        exePath = Process.GetCurrentProcess().MainModule?.FileName;
+                        var processPath = Process.GetCurrentProcess().MainModule?.FileName;
+                        if (!string.IsNullOrEmpty(processPath) && System.IO.File.Exists(processPath))
+                        {
+                            exePath = processPath;
+                        }
                     }
                     catch { }
 
-                    if (string.IsNullOrEmpty(exePath))
-                    {
-                        exePath = asm.Location;
-                    }
-
-                    if (string.IsNullOrEmpty(exePath))
-                    {
-                        exePath = AppContext.BaseDirectory; // last resort
-                    }
-
+                    // For single-file apps, use the directory containing the app
                     if (!string.IsNullOrEmpty(exePath) && System.IO.File.Exists(exePath))
                     {
                         var fvi = FileVersionInfo.GetVersionInfo(exePath);
                         productVersion = fvi?.ProductVersion;
                         fileVersion = fvi?.FileVersion;
+                    }
+                    else
+                    {
+                        // Fallback: try to get version info from the app directory
+                        try
+                        {
+                            var appDir = AppContext.BaseDirectory;
+                            var potentialExe = System.IO.Path.Combine(appDir, "RdpManager.exe");
+                            if (System.IO.File.Exists(potentialExe))
+                            {
+                                var fvi = FileVersionInfo.GetVersionInfo(potentialExe);
+                                productVersion = fvi?.ProductVersion;
+                                fileVersion = fvi?.FileVersion;
+                            }
+                        }
+                        catch { }
                     }
                 }
                 catch { }

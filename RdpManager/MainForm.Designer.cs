@@ -20,6 +20,9 @@ namespace RdpManager
         private ToolStripMenuItem editMenuItem;
         private ToolStripMenuItem copyMenuItem;
         private ToolStripMenuItem removeMenuItem;
+        private ToolStripMenuItem addTabMenuItem;
+        private ToolStripMenuItem renameTabMenuItem;
+        private ToolStripMenuItem removeTabMenuItem;
         private ListView lvConnections;
         private ColumnHeader colName;
         private ColumnHeader colHost;
@@ -42,7 +45,7 @@ namespace RdpManager
         private ToolStripMenuItem miSortHostAsc;
         private ToolStripMenuItem miSortHostDesc;
         private Panel contentPanel;
-        private Panel connectionsPanel;
+        private TabControl tabControl;
         private FlowLayoutPanel quickConnectPanel;
         
         private ComboBox quickConnectTextBox;
@@ -98,6 +101,12 @@ namespace RdpManager
             copyMenuItem.Click += (s, e) => CopySelectedIfAny();
             removeMenuItem = new ToolStripMenuItem("Remove");
             removeMenuItem.Click += (s, e) => RemoveSelectedIfAny();
+            addTabMenuItem = new ToolStripMenuItem("Add Tab...");
+            addTabMenuItem.Click += (s, e) => AddTab();
+            renameTabMenuItem = new ToolStripMenuItem("Rename Tab...");
+            renameTabMenuItem.Click += (s, e) => RenameTab();
+            removeTabMenuItem = new ToolStripMenuItem("Remove Tab...");
+            removeTabMenuItem.Click += (s, e) => RemoveTab();
             exportMenuItem = new ToolStripMenuItem("Export Connections...");
             exportMenuItem.Click += (s, e) => ExportConnections();
             importMenuItem = new ToolStripMenuItem("Import Connections...");
@@ -108,6 +117,10 @@ namespace RdpManager
                 editMenuItem,
                 copyMenuItem,
                 removeMenuItem,
+                new ToolStripSeparator(),
+                addTabMenuItem,
+                renameTabMenuItem,
+                removeTabMenuItem,
                 new ToolStripSeparator(),
                 exportMenuItem,
                 importMenuItem
@@ -151,16 +164,23 @@ namespace RdpManager
             menuEdit.DropDownItems.Add(miEditClearQuickConnectHistory);
 
             miViewButtons = new ToolStripMenuItem("Buttons View");
-            miViewButtons.Click += (s, e) => ToggleView(isList: false);
+            miViewButtons.Click += (s, e) => ToggleViewMode(isList: false);
             miViewList = new ToolStripMenuItem("List View");
-            miViewList.Click += (s, e) => ToggleView(isList: true);
+            miViewList.Click += (s, e) => ToggleViewMode(isList: true);
             miViewSort = new ToolStripMenuItem("Sort");
             miSortNameAsc = new ToolStripMenuItem("Name ▲"); miSortNameAsc.Click += (s, e) => SetSort("Name", true);
             miSortNameDesc = new ToolStripMenuItem("Name ▼"); miSortNameDesc.Click += (s, e) => SetSort("Name", false);
             miSortHostAsc = new ToolStripMenuItem("Host ▲"); miSortHostAsc.Click += (s, e) => SetSort("Host", true);
             miSortHostDesc = new ToolStripMenuItem("Host ▼"); miSortHostDesc.Click += (s, e) => SetSort("Host", false);
             miViewSort.DropDownItems.AddRange(new ToolStripItem[] { miSortNameAsc, miSortNameDesc, miSortHostAsc, miSortHostDesc });
-            menuView.DropDownItems.AddRange(new ToolStripItem[] { miViewButtons, miViewList, new ToolStripSeparator(), miViewSort });
+
+            var miViewTabs = new ToolStripMenuItem("Tabs");
+            var miAddTab = new ToolStripMenuItem("Add Tab..."); miAddTab.Click += (s, e) => AddTab();
+            var miRenameTab = new ToolStripMenuItem("Rename Tab..."); miRenameTab.Click += (s, e) => RenameTab();
+            var miRemoveTab = new ToolStripMenuItem("Remove Tab..."); miRemoveTab.Click += (s, e) => RemoveTab();
+            miViewTabs.DropDownItems.AddRange(new ToolStripItem[] { miAddTab, miRenameTab, miRemoveTab });
+
+            menuView.DropDownItems.AddRange(new ToolStripItem[] { miViewButtons, miViewList, new ToolStripSeparator(), miViewSort, new ToolStripSeparator(), miViewTabs });
 
             menuStrip.Items.AddRange(new ToolStripItem[] { menuFile, menuEdit, menuView });
             // Help menu (About)
@@ -200,6 +220,9 @@ namespace RdpManager
             var listEdit = new ToolStripMenuItem("Edit"); listEdit.Click += (s, e) => EditSelectedFromList();
             var listCopy = new ToolStripMenuItem("Copy Connection"); listCopy.Click += (s, e) => CopySelectedFromList();
             var listRemove = new ToolStripMenuItem("Remove"); listRemove.Click += (s, e) => RemoveSelectedFromList();
+            var listAddTab = new ToolStripMenuItem("Add Tab..."); listAddTab.Click += (s, e) => AddTab();
+            var listRenameTab = new ToolStripMenuItem("Rename Tab..."); listRenameTab.Click += (s, e) => RenameTab();
+            var listRemoveTab = new ToolStripMenuItem("Remove Tab..."); listRemoveTab.Click += (s, e) => RemoveTab();
             var listExport = new ToolStripMenuItem("Export Connections..."); listExport.Click += (s, e) => ExportConnections();
             var listImport = new ToolStripMenuItem("Import Connections..."); listImport.Click += (s, e) => ImportConnections();
             listMenu.Items.AddRange(new ToolStripItem[] {
@@ -208,6 +231,10 @@ namespace RdpManager
                 listEdit,
                 listCopy,
                 listRemove,
+                new ToolStripSeparator(),
+                listAddTab,
+                listRenameTab,
+                listRemoveTab,
                 new ToolStripSeparator(),
                 listExport,
                 listImport
@@ -277,15 +304,14 @@ namespace RdpManager
             quickConnectHeader.Font = new Font(Font, FontStyle.Bold);
             quickConnectHeader.BackColor = SystemColors.Window;
 
-            connectionsPanel = new Panel();
-            connectionsPanel.Dock = DockStyle.Fill;
-            connectionsPanel.Padding = new Padding(0, 8, 0, 0); // breathing room under header
-            connectionsPanel.BackColor = SystemColors.Window;
+            // Create TabControl for organizing connections
+            tabControl = new TabControl();
+            tabControl.Dock = DockStyle.Fill;
+            tabControl.SelectedIndexChanged += TabControl_SelectedIndexChanged;
+            tabControl.ContextMenuStrip = mainMenu;
 
-            // Add views into content panel
-            connectionsPanel.Controls.Add(lvConnections);
-            connectionsPanel.Controls.Add(flowConnections);
-            contentPanel.Controls.Add(connectionsPanel);
+            // connectionsPanel is now created dynamically in InitializeTabs()
+            contentPanel.Controls.Add(tabControl);
 
             // Use a TableLayoutPanel to enforce exact stacking order and sizing
             var mainLayout = new TableLayoutPanel();
@@ -304,7 +330,7 @@ namespace RdpManager
             mainLayout.Controls.Add(quickConnectHeader, 0, 1);
             mainLayout.Controls.Add(quickConnectPanel, 0, 2);
             mainLayout.Controls.Add(connectionListHeader, 0, 3);
-            mainLayout.Controls.Add(contentPanel, 0, 4);
+            mainLayout.Controls.Add(tabControl, 0, 4);
 
             this.Controls.Add(mainLayout);
         }

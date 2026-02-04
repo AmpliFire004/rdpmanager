@@ -12,6 +12,7 @@ namespace RdpManager.Models
         public string? Username { get; set; }
         public int? ScreenWidth { get; set; }
         public int? ScreenHeight { get; set; }
+        public string TabName { get; set; } = "General"; // Default tab name
         // (No protocol-specific fields here; only RDP supported)
     }
 }

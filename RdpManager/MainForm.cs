@@ -36,6 +36,7 @@ namespace RdpManager
             _sortAsc = _settings.SortAsc;
 
             LoadConnections();
+            InitializeTabs();
             // Re-layout cards when the container is resized
             try { flowConnections.SizeChanged += (s, e) => LayoutCards(); } catch { }
             try { lvConnections.SizeChanged += (s, e) => LayoutListColumns(); } catch { }
@@ -46,6 +47,223 @@ namespace RdpManager
         private void LoadConnections()
         {
             _connections = _store.Load();
+            // Migrate existing connections to have a tab name
+            foreach (var connection in _connections)
+            {
+                if (string.IsNullOrEmpty(connection.TabName))
+                {
+                    connection.TabName = "General";
+                }
+            }
+        }
+
+        private void InitializeTabs()
+        {
+            // Ensure we have at least one tab
+            if (_settings.Tabs == null || _settings.Tabs.Count == 0)
+            {
+                _settings.Tabs = new List<string> { "General" };
+                _settings.SelectedTab = "General";
+            }
+
+            // Create tabs
+            tabControl.TabPages.Clear();
+            foreach (var tabName in _settings.Tabs)
+            {
+                var tabPage = new TabPage(tabName);
+                // Create a new panel for each tab to hold the views
+                var tabPanel = new Panel();
+                tabPanel.Dock = DockStyle.Fill;
+                tabPanel.Padding = new Padding(0, 8, 0, 0);
+                tabPanel.BackColor = SystemColors.Window;
+
+                // Don't add controls here - they will be added when the tab is selected
+                tabPage.Controls.Add(tabPanel);
+                tabControl.TabPages.Add(tabPage);
+            }
+
+            // Select the saved tab
+            var selectedIndex = _settings.Tabs.IndexOf(_settings.SelectedTab);
+            if (selectedIndex >= 0)
+            {
+                tabControl.SelectedIndex = selectedIndex;
+            }
+            else
+            {
+                tabControl.SelectedIndex = 0;
+                _settings.SelectedTab = _settings.Tabs[0];
+            }
+
+            // Update the view for the selected tab
+            UpdateCurrentTabView();
+        }
+
+        private void TabControl_SelectedIndexChanged(object? sender, EventArgs e)
+        {
+            if (tabControl.SelectedTab != null)
+            {
+                _settings.SelectedTab = tabControl.SelectedTab.Text;
+                SaveSettings();
+                UpdateCurrentTabView();
+                RenderConnections();
+                // Ensure layout is updated for the newly visible tab
+                if (!_isListView)
+                {
+                    LayoutCards();
+                }
+                else
+                {
+                    LayoutListColumns();
+                }
+            }
+        }
+
+        private void AddTab()
+        {
+            using var inputDialog = new Form();
+            inputDialog.Text = "Add Tab";
+            inputDialog.Width = 300;
+            inputDialog.Height = 150;
+            inputDialog.StartPosition = FormStartPosition.CenterParent;
+
+            var label = new Label();
+            label.Text = "Tab Name:";
+            label.Location = new Point(10, 20);
+            label.AutoSize = true;
+
+            var textBox = new TextBox();
+            textBox.Location = new Point(10, 40);
+            textBox.Width = 260;
+
+            var okButton = new Button();
+            okButton.Text = "OK";
+            okButton.Location = new Point(110, 70);
+            okButton.DialogResult = DialogResult.OK;
+
+            var cancelButton = new Button();
+            cancelButton.Text = "Cancel";
+            cancelButton.Location = new Point(190, 70);
+            cancelButton.DialogResult = DialogResult.Cancel;
+
+            inputDialog.Controls.AddRange(new Control[] { label, textBox, okButton, cancelButton });
+            inputDialog.AcceptButton = okButton;
+            inputDialog.CancelButton = cancelButton;
+
+            if (inputDialog.ShowDialog(this) == DialogResult.OK && !string.IsNullOrWhiteSpace(textBox.Text))
+            {
+                var tabName = textBox.Text.Trim();
+                if (!_settings.Tabs.Contains(tabName))
+                {
+                    _settings.Tabs.Add(tabName);
+                    _settings.SelectedTab = tabName; // Select the new tab
+                    SaveSettings();
+                    InitializeTabs();
+                }
+                else
+                {
+                    MessageBox.Show(this, "A tab with this name already exists.", "Duplicate Tab", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                }
+            }
+        }
+
+        private void RemoveTab()
+        {
+            if (_settings.Tabs.Count <= 1)
+            {
+                MessageBox.Show(this, "Cannot remove the last tab.", "Cannot Remove Tab", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+
+            var currentTab = _settings.SelectedTab;
+            var confirm = MessageBox.Show(
+                this,
+                $"Remove tab '{currentTab}' and all its connections?",
+                "Confirm Remove Tab",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning);
+
+            if (confirm == DialogResult.Yes)
+            {
+                // Remove all connections in this tab
+                _connections.RemoveAll(c => c.TabName == currentTab);
+
+                // Remove the tab
+                _settings.Tabs.Remove(currentTab);
+
+                // Select the first remaining tab
+                _settings.SelectedTab = _settings.Tabs[0];
+
+                SaveSettings();
+                SaveConnections();
+                InitializeTabs();
+            }
+        }
+
+        private void RenameTab()
+        {
+            var currentTab = _settings.SelectedTab;
+            using var inputDialog = new Form();
+            inputDialog.Text = "Rename Tab";
+            inputDialog.Width = 300;
+            inputDialog.Height = 150;
+            inputDialog.StartPosition = FormStartPosition.CenterParent;
+
+            var label = new Label();
+            label.Text = "New tab name:";
+            label.Location = new Point(10, 20);
+            label.AutoSize = true;
+
+            var textBox = new TextBox();
+            textBox.Location = new Point(10, 40);
+            textBox.Width = 260;
+            textBox.Text = currentTab;
+
+            var okButton = new Button();
+            okButton.Text = "OK";
+            okButton.Location = new Point(110, 70);
+            okButton.DialogResult = DialogResult.OK;
+
+            var cancelButton = new Button();
+            cancelButton.Text = "Cancel";
+            cancelButton.Location = new Point(190, 70);
+            cancelButton.DialogResult = DialogResult.Cancel;
+
+            inputDialog.Controls.AddRange(new Control[] { label, textBox, okButton, cancelButton });
+            inputDialog.AcceptButton = okButton;
+            inputDialog.CancelButton = cancelButton;
+
+            if (inputDialog.ShowDialog(this) == DialogResult.OK && !string.IsNullOrWhiteSpace(textBox.Text))
+            {
+                var newTabName = textBox.Text.Trim();
+                if (newTabName == currentTab)
+                {
+                    return; // No change
+                }
+
+                if (_settings.Tabs.Contains(newTabName))
+                {
+                    MessageBox.Show(this, "A tab with this name already exists.", "Duplicate Tab", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                    return;
+                }
+
+                // Update the tab name in settings
+                var tabIndex = _settings.Tabs.IndexOf(currentTab);
+                _settings.Tabs[tabIndex] = newTabName;
+                _settings.SelectedTab = newTabName;
+
+                // Update all connections that belong to this tab
+                foreach (var connection in _connections)
+                {
+                    if (connection.TabName == currentTab)
+                    {
+                        connection.TabName = newTabName;
+                    }
+                }
+
+                SaveSettings();
+                SaveConnections();
+                InitializeTabs();
+            }
         }
 
         private void SaveConnections()
@@ -55,7 +273,8 @@ namespace RdpManager
 
         private void RenderConnections()
         {
-            var list = GetSorted(_connections);
+            var allConnections = _connections.Where(c => c.TabName == _settings.SelectedTab).ToList();
+            var list = GetSorted(allConnections);
             if (!_isListView)
             {
                 flowConnections.SuspendLayout();
@@ -131,6 +350,7 @@ namespace RdpManager
             using var dlg = new AddConnectionForm();
             if (dlg.ShowDialog(this) == DialogResult.OK && dlg.NewConnection != null)
             {
+                dlg.NewConnection.TabName = _settings.SelectedTab;
                 _connections.Add(dlg.NewConnection);
                 SaveConnections();
                 RenderConnections();
@@ -185,7 +405,8 @@ namespace RdpManager
                 Domain = source.Domain,
                 Username = source.Username,
                 ScreenWidth = source.ScreenWidth,
-                ScreenHeight = source.ScreenHeight
+                ScreenHeight = source.ScreenHeight,
+                TabName = source.TabName // Keep the same tab
             };
 
             _connections.Add(clone);
@@ -586,6 +807,38 @@ namespace RdpManager
             try { _settingsStore.Save(_settings); } catch { }
         }
 
+        private void ToggleViewMode(bool isList)
+        {
+            _isListView = isList;
+            _settings.IsListView = _isListView;
+            SaveSettings();
+
+            // Update menu checks
+            try { miViewButtons.Checked = !_isListView; } catch { }
+            try { miViewList.Checked = _isListView; } catch { }
+
+            // Update the current tab's panel
+            UpdateCurrentTabView();
+            RenderConnections();
+        }
+
+        private void UpdateCurrentTabView()
+        {
+            if (tabControl.SelectedTab != null && tabControl.SelectedTab.Controls.Count > 0)
+            {
+                var tabPanel = (Panel)tabControl.SelectedTab.Controls[0];
+                tabPanel.Controls.Clear();
+                if (_isListView)
+                {
+                    tabPanel.Controls.Add(lvConnections);
+                }
+                else
+                {
+                    tabPanel.Controls.Add(flowConnections);
+                }
+            }
+        }
+
         private List<Connection> GetSorted(List<Connection> src)
         {
             IEnumerable<Connection> q;
@@ -606,9 +859,7 @@ namespace RdpManager
 
         private string FormatHost(Connection c)
         {
-            var host = c.Address;
-            if (c.Port.HasValue && c.Port.Value > 0) host = $"{host}:{c.Port.Value}";
-            return host;
+            return c.Address;
         }
 
         private void EditSelectedFromList()
