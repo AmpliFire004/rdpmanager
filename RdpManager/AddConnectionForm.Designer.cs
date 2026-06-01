@@ -8,6 +8,7 @@ namespace RdpManager
         private System.ComponentModel.IContainer components = null;
         private TextBox txtName;
         private TextBox txtAddress;
+        private TextBox txtDescription;
         private NumericUpDown numPort;
         private TextBox txtDomain;
         private TextBox txtUsername;
@@ -18,6 +19,7 @@ namespace RdpManager
         private Label lblAddress;
         private Label lblPort;
         private Label lblDomain;
+        private Label lblDescription;
         private Label lblUsername;
         private Label lblResolution;
 
@@ -52,21 +54,24 @@ namespace RdpManager
             lblAddress = new Label { Left = 16, Top = 56, Width = 100, Text = "Address:" };
             txtAddress = new TextBox { Left = 120, Top = 52, Width = 320, PlaceholderText = "hostname or IP", Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
 
-            lblPort = new Label { Left = 16, Top = 216, Width = 100, Text = "Port:" };
-            numPort = new NumericUpDown { Left = 120, Top = 212, Width = 100, Minimum = 1, Maximum = 65535, Value = 3389 };
+            lblDescription = new Label { Left = 16, Top = 96, Width = 100, Text = "Description:" };
+            txtDescription = new TextBox { Left = 120, Top = 92, Width = 320, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
 
-            lblDomain = new Label { Left = 16, Top = 96, Width = 100, Text = "Domain:" };
-            txtDomain = new TextBox { Left = 120, Top = 92, Width = 180, Anchor = AnchorStyles.Top | AnchorStyles.Left };
+            lblPort = new Label { Left = 16, Top = 256, Width = 100, Text = "Port:" };
+            numPort = new NumericUpDown { Left = 120, Top = 252, Width = 100, Minimum = 1, Maximum = 65535, Value = 3389 };
+
+            lblDomain = new Label { Left = 16, Top = 136, Width = 100, Text = "Domain:" };
+            txtDomain = new TextBox { Left = 120, Top = 132, Width = 180, Anchor = AnchorStyles.Top | AnchorStyles.Left };
 
             // Make the Domain and User fields shorter so they fit nicely.
             // Place the User field under the Domain field to improve layout.
-            lblUsername = new Label { Left = 16, Top = 136, Width = 100, Text = "User:" };
-            txtUsername = new TextBox { Left = 120, Top = 132, Width = 180, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
+            lblUsername = new Label { Left = 16, Top = 176, Width = 100, Text = "User:" };
+            txtUsername = new TextBox { Left = 120, Top = 172, Width = 180, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
 
             // Move resolution down below the user row so the form feels balanced.
-            lblResolution = new Label { Left = 16, Top = 176, Width = 100, Text = "Resolution:" };
+            lblResolution = new Label { Left = 16, Top = 216, Width = 100, Text = "Resolution:" };
             // Allow typing custom resolutions
-            cbResolution = new ComboBox { Left = 120, Top = 172, Width = 320, DropDownStyle = ComboBoxStyle.DropDown, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
+            cbResolution = new ComboBox { Left = 120, Top = 212, Width = 320, DropDownStyle = ComboBoxStyle.DropDown, Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right };
             var resolutions = new string[]
             {
                 "Fullscreen",
@@ -96,6 +101,8 @@ namespace RdpManager
             this.Controls.Add(txtName);
             this.Controls.Add(lblAddress);
             this.Controls.Add(txtAddress);
+            this.Controls.Add(lblDescription);
+            this.Controls.Add(txtDescription);
             this.Controls.Add(lblPort);
             this.Controls.Add(numPort);
             this.Controls.Add(lblDomain);

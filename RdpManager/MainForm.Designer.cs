@@ -11,7 +11,6 @@ namespace RdpManager
         /// </summary>
         private System.ComponentModel.IContainer components = null;
 
-        private FlowLayoutPanel flowConnections;
         private ContextMenuStrip mainMenu;
         private ToolStripMenuItem addMenuItem;
         private ToolStripMenuItem importMenuItem;
@@ -26,6 +25,7 @@ namespace RdpManager
         private ListView lvConnections;
         private ColumnHeader colName;
         private ColumnHeader colHost;
+        private ColumnHeader colDescription;
         private ContextMenuStrip listMenu;
         private MenuStrip menuStrip;
         private ToolStripMenuItem menuFile;
@@ -37,7 +37,6 @@ namespace RdpManager
         private ToolStripMenuItem miFileQuickConnect;
         private ToolStripMenuItem miFileImport;
         private ToolStripMenuItem miFileExport;
-        private ToolStripMenuItem miViewButtons;
         private ToolStripMenuItem miViewList;
         private ToolStripMenuItem miViewSort;
         private ToolStripMenuItem miSortNameAsc;
@@ -74,6 +73,13 @@ namespace RdpManager
             this.Text = "RDP Manager";
             this.Width = 640;
             this.Height = 480;
+            // Make main window fixed size (no resizing by user)
+            try
+            {
+                this.FormBorderStyle = FormBorderStyle.FixedSingle;
+                this.MaximizeBox = false;
+            }
+            catch { }
             // Prefer the embedded icon so published single-file builds retain it.
             using var iconStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("RdpManager.Assets.AppIcon.ico");
             if (iconStream != null)
@@ -107,9 +113,9 @@ namespace RdpManager
             renameTabMenuItem.Click += (s, e) => RenameTab();
             removeTabMenuItem = new ToolStripMenuItem("Remove Tab...");
             removeTabMenuItem.Click += (s, e) => RemoveTab();
-            exportMenuItem = new ToolStripMenuItem("Export Connections...");
+            exportMenuItem = new ToolStripMenuItem("Export...");
             exportMenuItem.Click += (s, e) => ExportConnections();
-            importMenuItem = new ToolStripMenuItem("Import Connections...");
+            importMenuItem = new ToolStripMenuItem("Import...");
             importMenuItem.Click += (s, e) => ImportConnections();
             mainMenu.Items.AddRange(new ToolStripItem[] {
                 addMenuItem,
@@ -149,9 +155,9 @@ namespace RdpManager
             {
                 try { quickConnectTextBox.Focus(); quickConnectTextBox.SelectAll(); } catch { }
             };
-            miFileImport = new ToolStripMenuItem("Import Connections...");
+            miFileImport = new ToolStripMenuItem("Import...");
             miFileImport.Click += (s, e) => ImportConnections();
-            miFileExport = new ToolStripMenuItem("Export Connections...");
+            miFileExport = new ToolStripMenuItem("Export...");
             miFileExport.Click += (s, e) => ExportConnections();
             menuFile.DropDownItems.AddRange(new ToolStripItem[] { miFileAdd, miFileQuickConnect, new ToolStripSeparator(), miFileImport, miFileExport });
 
@@ -160,11 +166,15 @@ namespace RdpManager
             miEditQuickConnectSettings.Click += (s, e) => ShowQuickConnectSettings();
             var miEditClearQuickConnectHistory = new ToolStripMenuItem("Clear Quick Connect History");
             miEditClearQuickConnectHistory.Click += (s, e) => ClearQuickConnectHistory();
+            var miEditManageConnections = new ToolStripMenuItem("Manage Connections...");
+            miEditManageConnections.Click += (s, e) => ShowManageConnections();
+            var miEditImportFromAD = new ToolStripMenuItem("Import from Active Directory...");
+            miEditImportFromAD.Click += (s, e) => ShowImportFromAD();
             menuEdit.DropDownItems.Add(miEditQuickConnectSettings);
             menuEdit.DropDownItems.Add(miEditClearQuickConnectHistory);
+            menuEdit.DropDownItems.Add(miEditManageConnections);
+            menuEdit.DropDownItems.Add(miEditImportFromAD);
 
-            miViewButtons = new ToolStripMenuItem("Buttons View");
-            miViewButtons.Click += (s, e) => ToggleViewMode(isList: false);
             miViewList = new ToolStripMenuItem("List View");
             miViewList.Click += (s, e) => ToggleViewMode(isList: true);
             miViewSort = new ToolStripMenuItem("Sort");
@@ -180,7 +190,7 @@ namespace RdpManager
             var miRemoveTab = new ToolStripMenuItem("Remove Tab..."); miRemoveTab.Click += (s, e) => RemoveTab();
             miViewTabs.DropDownItems.AddRange(new ToolStripItem[] { miAddTab, miRenameTab, miRemoveTab });
 
-            menuView.DropDownItems.AddRange(new ToolStripItem[] { miViewButtons, miViewList, new ToolStripSeparator(), miViewSort, new ToolStripSeparator(), miViewTabs });
+            menuView.DropDownItems.AddRange(new ToolStripItem[] { miViewList, new ToolStripSeparator(), miViewSort, new ToolStripSeparator(), miViewTabs });
 
             menuStrip.Items.AddRange(new ToolStripItem[] { menuFile, menuEdit, menuView });
             // Help menu (About)
@@ -191,15 +201,6 @@ namespace RdpManager
             menuStrip.Items.Add(menuHelp);
             this.MainMenuStrip = menuStrip;
 
-            flowConnections = new FlowLayoutPanel();
-            flowConnections.Dock = DockStyle.Fill;
-            flowConnections.AutoScroll = true;
-            flowConnections.Padding = new Padding(12);
-            flowConnections.WrapContents = true;
-            flowConnections.ContextMenuStrip = mainMenu;
-            flowConnections.Visible = false;
-            flowConnections.BackColor = SystemColors.Window;
-
             lvConnections = new ListView();
             lvConnections.Dock = DockStyle.Fill;
             lvConnections.View = View.Details;
@@ -207,10 +208,12 @@ namespace RdpManager
             lvConnections.HideSelection = false;
             lvConnections.Visible = true;
             lvConnections.BackColor = SystemColors.Window;
-            colName = new ColumnHeader(); colName.Text = "Name"; colName.Width = 220;
-            colHost = new ColumnHeader(); colHost.Text = "Hostname"; colHost.Width = 320;
-            lvConnections.Columns.AddRange(new ColumnHeader[] { colName, colHost });
+            colName = new ColumnHeader(); colName.Text = "Name"; colName.Width = 200;
+            colHost = new ColumnHeader(); colHost.Text = "Hostname"; colHost.Width = 260;
+            colDescription = new ColumnHeader(); colDescription.Text = "Description"; colDescription.Width = 180;
+            lvConnections.Columns.AddRange(new ColumnHeader[] { colName, colHost, colDescription });
             lvConnections.ColumnClick += (s, e) => ListView_ColumnClick(e.Column);
+            lvConnections.ColumnWidthChanged += (s, e) => OnConnectionColumnWidthChanged(s, e);
             lvConnections.ItemActivate += (s, e) => ConnectSelectedFromList();
             lvConnections.SizeChanged += (s, e) => LayoutListColumns();
 
@@ -223,8 +226,9 @@ namespace RdpManager
             var listAddTab = new ToolStripMenuItem("Add Tab..."); listAddTab.Click += (s, e) => AddTab();
             var listRenameTab = new ToolStripMenuItem("Rename Tab..."); listRenameTab.Click += (s, e) => RenameTab();
             var listRemoveTab = new ToolStripMenuItem("Remove Tab..."); listRemoveTab.Click += (s, e) => RemoveTab();
-            var listExport = new ToolStripMenuItem("Export Connections..."); listExport.Click += (s, e) => ExportConnections();
-            var listImport = new ToolStripMenuItem("Import Connections..."); listImport.Click += (s, e) => ImportConnections();
+            var listExport = new ToolStripMenuItem("Export..."); listExport.Click += (s, e) => ExportConnections();
+            var listImport = new ToolStripMenuItem("Import..."); listImport.Click += (s, e) => ImportConnections();
+            var listResetColumns = new ToolStripMenuItem("Reset Column Widths"); listResetColumns.Click += (s, e) => ResetColumnWidths(s, e);
             listMenu.Items.AddRange(new ToolStripItem[] {
                 listAdd,
                 listConnect,
@@ -237,7 +241,9 @@ namespace RdpManager
                 listRemoveTab,
                 new ToolStripSeparator(),
                 listExport,
-                listImport
+                listImport,
+                new ToolStripSeparator(),
+                listResetColumns
             });
             lvConnections.ContextMenuStrip = listMenu;
 
