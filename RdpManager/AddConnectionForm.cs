@@ -22,6 +22,7 @@ namespace RdpManager
             // Prefill fields from existing connection
             txtName.Text = existing.Name;
             txtAddress.Text = existing.Address;
+            txtDescription.Text = existing.Description ?? string.Empty;
 
             if (existing.Port.HasValue)
             {
@@ -93,6 +94,7 @@ namespace RdpManager
             {
                 Name = name,
                 Address = address,
+                Description = string.IsNullOrWhiteSpace(txtDescription.Text) ? null : txtDescription.Text.Trim(),
                 Port = port,
                 Domain = domain,
                 Username = username,

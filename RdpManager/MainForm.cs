@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
+using System.Runtime.InteropServices;
 using RdpManager.Models;
 using RdpManager.Services;
 
@@ -11,10 +12,14 @@ namespace RdpManager
 {
     public partial class MainForm : Form
     {
+        // P/Invoke to hide/show scrollbars when necessary
+        [DllImport("user32.dll")]
+        private static extern bool ShowScrollBar(IntPtr hWnd, int wBar, bool bShow);
+        private const int SB_HORZ = 0;
+        private const int SB_VERT = 1;
         private readonly ConnectionStore _store = new ConnectionStore();
         private readonly SettingsStore _settingsStore = new SettingsStore();
         private List<Connection> _connections = new();
-        private bool _isListView = true;
         private string _sortField = "Name"; // or "Host"
         private bool _sortAsc = true;
         private UserSettings _settings = new UserSettings();
@@ -25,23 +30,48 @@ namespace RdpManager
             InitializeComponent();
             // Load persisted settings
             _settings = _settingsStore.Load();
+            // Apply initial column widths (saved or percentage fallback)
+            try { ApplyInitialColumnWidths(); } catch { }
             _settings.QuickConnectHistory ??= new List<string>();
             if (quickConnectTextBox != null)
             {
                 quickConnectTextBox.AutoCompleteCustomSource = _quickConnectAutoComplete;
             }
             UpdateQuickConnectAutocomplete();
-            _isListView = _settings.IsListView;
             _sortField = string.Equals(_settings.SortField, "Host", StringComparison.OrdinalIgnoreCase) ? "Host" : "Name";
             _sortAsc = _settings.SortAsc;
 
             LoadConnections();
             InitializeTabs();
-            // Re-layout cards when the container is resized
-            try { flowConnections.SizeChanged += (s, e) => LayoutCards(); } catch { }
+            // Re-layout when the container is resized
             try { lvConnections.SizeChanged += (s, e) => LayoutListColumns(); } catch { }
             UpdateSortMenuChecks();
-            ToggleView(_isListView);
+            ToggleView(true);
+            // Persist column widths on close in case the ColumnWidthChanged event wasn't fired
+            try { this.FormClosing += MainForm_FormClosing; } catch { }
+        }
+
+        private void MainForm_FormClosing(object? sender, FormClosingEventArgs e)
+        {
+            try
+            {
+                // Save whatever the current column widths are and the auto-layout preference
+                if (colName != null)
+                {
+                    _settings.ColumnWidthName = colName.Width;
+                }
+                if (colHost != null)
+                {
+                    _settings.ColumnWidthHost = colHost.Width;
+                }
+                if (colDescription != null)
+                {
+                    _settings.ColumnWidthDescription = colDescription.Width;
+                }
+                _settings.AutoLayoutColumns = _autoLayoutColumns;
+                SaveSettings();
+            }
+            catch { }
         }
 
         private void LoadConnections()
@@ -74,7 +104,8 @@ namespace RdpManager
                 // Create a new panel for each tab to hold the views
                 var tabPanel = new Panel();
                 tabPanel.Dock = DockStyle.Fill;
-                tabPanel.Padding = new Padding(0, 8, 0, 0);
+                // Add horizontal padding so the connections list has space on left/right
+                tabPanel.Padding = new Padding(12, 8, 12, 0);
                 tabPanel.BackColor = SystemColors.Window;
 
                 // Don't add controls here - they will be added when the tab is selected
@@ -107,14 +138,7 @@ namespace RdpManager
                 UpdateCurrentTabView();
                 RenderConnections();
                 // Ensure layout is updated for the newly visible tab
-                if (!_isListView)
-                {
-                    LayoutCards();
-                }
-                else
-                {
-                    LayoutListColumns();
-                }
+                LayoutListColumns();
             }
         }
 
@@ -275,74 +299,24 @@ namespace RdpManager
         {
             var allConnections = _connections.Where(c => c.TabName == _settings.SelectedTab).ToList();
             var list = GetSorted(allConnections);
-            if (!_isListView)
+            lvConnections.BeginUpdate();
+            try
             {
-                flowConnections.SuspendLayout();
-                try
+                lvConnections.Items.Clear();
+                foreach (var c in list)
                 {
-                    flowConnections.Controls.Clear();
-                    foreach (var c in list)
-                    {
-                        var btn = new Button();
-                        btn.Text = c.Name;
-                        btn.AutoSize = false;
-                        btn.MinimumSize = new Size(50, 44);
-                        btn.Width = 75; // will be resized in LayoutCards()
-                        btn.Height = 44;
-                        btn.Margin = new Padding(8);
-                        btn.Tag = c;
-                        btn.BackColor = Color.White;
-                        btn.Click += (s, e) => LaunchRdp((Connection)btn.Tag!);
-
-                    var menu = new ContextMenuStrip();
-                    var addItem = new ToolStripMenuItem("Add Connection"); addItem.Click += btnAdd_Click;
-                    var connectItem = new ToolStripMenuItem("Connect"); connectItem.Click += (s, e) => LaunchRdp((Connection)btn.Tag!);
-                    var editItem = new ToolStripMenuItem("Edit"); editItem.Click += (s, e) => EditConnection((Connection)btn.Tag!);
-                    var copyItem = new ToolStripMenuItem("Copy Connection"); copyItem.Click += (s, e) => CopyConnection((Connection)btn.Tag!);
-                    var removeItem = new ToolStripMenuItem("Remove"); removeItem.Click += (s, e) => RemoveConnection((Connection)btn.Tag!);
-                    var exportItem = new ToolStripMenuItem("Export Connections..."); exportItem.Click += (s, e) => ExportConnections();
-                    var importItem = new ToolStripMenuItem("Import Connections..."); importItem.Click += (s, e) => ImportConnections();
-                    menu.Items.AddRange(new ToolStripItem[] {
-                        addItem,
-                        connectItem,
-                        editItem,
-                        copyItem,
-                        removeItem,
-                        new ToolStripSeparator(),
-                        exportItem,
-                        importItem
-                    });
-                    btn.ContextMenuStrip = menu;
-
-                        flowConnections.Controls.Add(btn);
-                    }
+                    var lvi = new ListViewItem(c.Name);
+                    lvi.SubItems.Add(FormatHost(c));
+                    lvi.SubItems.Add(c.Description ?? string.Empty);
+                    lvi.Tag = c;
+                    lvConnections.Items.Add(lvi);
                 }
-                finally
-                {
-                    flowConnections.ResumeLayout();
-                }
-                LayoutCards();
             }
-            else
+            finally
             {
-                lvConnections.BeginUpdate();
-                try
-                {
-                    lvConnections.Items.Clear();
-                    foreach (var c in list)
-                    {
-                        var lvi = new ListViewItem(c.Name);
-                        lvi.SubItems.Add(FormatHost(c));
-                        lvi.Tag = c;
-                        lvConnections.Items.Add(lvi);
-                    }
-                }
-                finally
-                {
-                    lvConnections.EndUpdate();
-                }
-                LayoutListColumns();
+                lvConnections.EndUpdate();
             }
+            LayoutListColumns();
         }
 
         private void btnAdd_Click(object? sender, EventArgs e)
@@ -385,6 +359,7 @@ namespace RdpManager
                 c.Port = dlg.NewConnection.Port;
                 c.Domain = dlg.NewConnection.Domain;
                 c.Username = dlg.NewConnection.Username;
+                c.Description = dlg.NewConnection.Description;
                 c.ScreenWidth = dlg.NewConnection.ScreenWidth;
                 c.ScreenHeight = dlg.NewConnection.ScreenHeight;
 
@@ -401,6 +376,7 @@ namespace RdpManager
             {
                 Name = BuildCopyName(source.Name),
                 Address = source.Address,
+                Description = source.Description,
                 Port = source.Port,
                 Domain = source.Domain,
                 Username = source.Username,
@@ -435,16 +411,22 @@ namespace RdpManager
             {
                 using var dlg = new SaveFileDialog
                 {
-                    Title = "Export Connections",
+                    Title = "Export Connections and Tabs",
                     Filter = "JSON files (*.json)|*.json|All files (*.*)|*.*",
-                    FileName = "connections.json",
+                    FileName = "rdpmanager_backup.json",
                     OverwritePrompt = true
                 };
                 if (dlg.ShowDialog(this) == DialogResult.OK)
                 {
-                    var json = System.Text.Json.JsonSerializer.Serialize(_connections, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
+                    var exportData = new ExportData
+                    {
+                        Connections = _connections,
+                        Tabs = _settings.Tabs,
+                        SelectedTab = _settings.SelectedTab
+                    };
+                    var json = System.Text.Json.JsonSerializer.Serialize(exportData, new System.Text.Json.JsonSerializerOptions { WriteIndented = true });
                     System.IO.File.WriteAllText(dlg.FileName, json);
-                    MessageBox.Show(this, "Connections exported.", "Export", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    MessageBox.Show(this, "Connections and tabs exported.", "Export", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
             }
             catch (Exception ex)
@@ -459,34 +441,79 @@ namespace RdpManager
             {
                 using var dlg = new OpenFileDialog
                 {
-                    Title = "Import Connections",
+                    Title = "Import Connections and Tabs",
                     Filter = "JSON files (*.json)|*.json|All files (*.*)|*.*",
                     Multiselect = false
                 };
                 if (dlg.ShowDialog(this) == DialogResult.OK)
                 {
                     var json = System.IO.File.ReadAllText(dlg.FileName);
-                    var imported = System.Text.Json.JsonSerializer.Deserialize<System.Collections.Generic.List<Connection>>(json) ?? new System.Collections.Generic.List<Connection>();
 
-                    if (imported.Count == 0)
+                    // Try to import as new format (with tabs)
+                    ExportData? importData = null;
+                    try
+                    {
+                        importData = System.Text.Json.JsonSerializer.Deserialize<ExportData>(json);
+                    }
+                    catch
+                    {
+                        // Fall back to old format (connections only)
+                        var connections = System.Text.Json.JsonSerializer.Deserialize<System.Collections.Generic.List<Connection>>(json) ?? new System.Collections.Generic.List<Connection>();
+                        importData = new ExportData { Connections = connections };
+                    }
+
+                    if (importData == null || importData.Connections.Count == 0)
                     {
                         MessageBox.Show(this, "No connections found in the file.", "Import", MessageBoxButtons.OK, MessageBoxIcon.Information);
                         return;
                     }
 
-                    var replace = MessageBox.Show(this,
-                        $"Import {imported.Count} connections and replace existing list?\nChoose No to cancel.",
+                    var replaceConnections = MessageBox.Show(this,
+                        $"Import {importData.Connections.Count} connections?\nChoose Yes to replace existing connections, No to merge.",
                         "Import Connections",
-                        MessageBoxButtons.YesNo,
+                        MessageBoxButtons.YesNoCancel,
                         MessageBoxIcon.Question);
 
-                    if (replace == DialogResult.Yes)
+                    if (replaceConnections == DialogResult.Cancel) return;
+
+                    var replaceTabs = DialogResult.No;
+                    if (importData.Tabs.Count > 1 || importData.Tabs[0] != "General")
                     {
-                        _connections = imported;
-                        SaveConnections();
-                        RenderConnections();
-                        MessageBox.Show(this, "Connections imported.", "Import", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                        replaceTabs = MessageBox.Show(this,
+                            $"Import {importData.Tabs.Count} tabs (including '{importData.SelectedTab}')?\nChoose Yes to replace existing tabs, No to keep current tabs.",
+                            "Import Tabs",
+                            MessageBoxButtons.YesNo,
+                            MessageBoxIcon.Question);
                     }
+
+                    if (replaceConnections == DialogResult.Yes)
+                    {
+                        _connections = importData.Connections;
+                    }
+                    else
+                    {
+                        // Merge connections
+                        foreach (var conn in importData.Connections)
+                        {
+                            // Avoid duplicates by name and address
+                            if (!_connections.Any(c => c.Name == conn.Name && c.Address == conn.Address))
+                            {
+                                _connections.Add(conn);
+                            }
+                        }
+                    }
+
+                    if (replaceTabs == DialogResult.Yes)
+                    {
+                        _settings.Tabs = importData.Tabs;
+                        _settings.SelectedTab = importData.SelectedTab;
+                        SaveSettings();
+                        InitializeTabs();
+                    }
+
+                    SaveConnections();
+                    RenderConnections();
+                    MessageBox.Show(this, "Import completed.", "Import", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 }
             }
             catch (Exception ex)
@@ -499,55 +526,70 @@ namespace RdpManager
         {
             try
             {
-                var host = c.Address;
-                if (c.Port.HasValue && c.Port.Value > 0)
+                if (TryLaunchEmbeddedRdp(c))
                 {
-                    host = $"{host}:{c.Port.Value}";
+                    return;
                 }
 
-                // Build .rdp file content to support username/domain and resolution
-                var lines = new System.Collections.Generic.List<string>();
-                lines.Add($"full address:s:{host}");
-
-                if (!string.IsNullOrWhiteSpace(c.Username))
-                {
-                    var user = c.Username!;
-                    if (!string.IsNullOrWhiteSpace(c.Domain))
-                    {
-                        user = $"{c.Domain}\\{user}";
-                    }
-                    lines.Add($"username:s:{user}");
-                }
-
-                if (c.ScreenWidth.HasValue && c.ScreenHeight.HasValue)
-                {
-                    lines.Add($"desktopwidth:i:{c.ScreenWidth.Value}");
-                    lines.Add($"desktopheight:i:{c.ScreenHeight.Value}");
-                    // Ensure windowed mode so explicit resolution is honored
-                    lines.Add("screen mode id:i:1");
-                    lines.Add("use multimon:i:0");
-                }
-
-                // Hint to prompt for credentials when needed
-                lines.Add("prompt for credentials:i:1");
-
-                var tempDir = System.IO.Path.GetTempPath();
-                var safeName = SanitizeFileName(string.IsNullOrWhiteSpace(c.Name) ? "RdpManager" : c.Name);
-                var rdpPath = System.IO.Path.Combine(tempDir, $"{safeName}.rdp");
-                System.IO.File.WriteAllLines(rdpPath, lines);
-
-                var psi = new ProcessStartInfo
-                {
-                    FileName = "mstsc.exe",
-                    Arguments = $"\"{rdpPath}\"",
-                    UseShellExecute = true
-                };
-                Process.Start(psi);
+                LaunchRdpWithMstsc(c);
             }
             catch (Exception ex)
             {
                 MessageBox.Show(this, ex.Message, "Failed to start RDP", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
+        }
+
+        private bool TryLaunchEmbeddedRdp(Connection c)
+        {
+            try
+            {
+                var sessionForm = new RdpSessionForm(c, () => LaunchRdpWithMstsc(c));
+                sessionForm.Show(this);
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private void LaunchRdpWithMstsc(Connection c)
+        {
+            var host = c.Address;
+            if (c.Port.HasValue && c.Port.Value > 0)
+            {
+                host = $"{host}:{c.Port.Value}";
+            }
+
+            // Build .rdp file content to support username/domain and resolution
+            var lines = new System.Collections.Generic.List<string>();
+            lines.Add($"full address:s:{host}");
+
+            if (!string.IsNullOrWhiteSpace(c.Username))
+            {
+                var user = c.Username!;
+                if (!string.IsNullOrWhiteSpace(c.Domain))
+                {
+                    user = $"{c.Domain}\\{user}";
+                }
+                lines.Add($"username:s:{user}");
+            }
+
+            // Hint to prompt for credentials when needed
+            lines.Add("prompt for credentials:i:1");
+
+            var tempDir = System.IO.Path.GetTempPath();
+            var safeName = SanitizeFileName(string.IsNullOrWhiteSpace(c.Name) ? "RdpManager" : c.Name);
+            var rdpPath = System.IO.Path.Combine(tempDir, $"{safeName}.rdp");
+            System.IO.File.WriteAllLines(rdpPath, lines);
+
+            var psi = new ProcessStartInfo
+            {
+                FileName = "mstsc.exe",
+                Arguments = $"\"{rdpPath}\"",
+                UseShellExecute = true
+            };
+            Process.Start(psi);
         }
 
         
@@ -612,6 +654,67 @@ namespace RdpManager
             catch (Exception ex)
             {
                 MessageBox.Show(this, ex.Message, "Quick Connect Settings", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        // Opens the Manage Connections dialog
+        private void ShowManageConnections()
+        {
+            try
+            {
+                using var dlg = new ManageConnectionsForm(_connections, _settings.Tabs, () =>
+                {
+                    SaveConnections();
+                    SaveSettings();
+                    InitializeTabs();
+                    RenderConnections();
+                });
+                dlg.ShowDialog(this);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, ex.Message, "Manage Connections", MessageBoxButtons.OK, MessageBoxIcon.Error);
+            }
+        }
+
+        // Opens the Import from Active Directory dialog
+        private void ShowImportFromAD()
+        {
+            try
+            {
+                using var dlg = new ImportFromADForm(_settings.Tabs, (connections) =>
+                {
+                    // Add imported connections, avoiding duplicates
+                    foreach (var conn in connections)
+                    {
+                        if (!_connections.Any(c => c.Name == conn.Name && c.Address == conn.Address))
+                        {
+                            _connections.Add(conn);
+                        }
+                    }
+                    SaveConnections();
+
+                    // If the import introduced or used a tab, persist tabs and select the imported tab
+                    try
+                    {
+                        if (connections.Count > 0 && !string.IsNullOrWhiteSpace(connections[0].TabName))
+                        {
+                            _settings.SelectedTab = connections[0].TabName;
+                        }
+                        // Persist any changes to the shared tabs list
+                        SaveSettings();
+                        InitializeTabs();
+                    }
+                    catch { }
+
+                    RenderConnections();
+                    MessageBox.Show(this, $"Imported {connections.Count} computer(s) from Active Directory.", "Import Complete", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                });
+                dlg.ShowDialog(this);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, ex.Message, "Import from Active Directory", MessageBoxButtons.OK, MessageBoxIcon.Error);
             }
         }
 
@@ -690,6 +793,44 @@ namespace RdpManager
             }
         }
 
+        // Reset column widths to the default proportional layout and re-enable auto-layout
+        private void ResetColumnWidths(object? sender, EventArgs e)
+        {
+            _autoLayoutColumns = true;
+            try
+            {
+                // Clear persisted widths so defaults are used
+                _settings.ColumnWidthName = null;
+                _settings.ColumnWidthHost = null;
+                _settings.ColumnWidthDescription = null;
+                _settings.AutoLayoutColumns = true;
+                SaveSettings();
+            }
+            catch { }
+            LayoutListColumns();
+            try { MessageBox.Show(this, "Column widths reset to defaults.", "Reset Columns", MessageBoxButtons.OK, MessageBoxIcon.Information); } catch { }
+        }
+
+        // When true, the app will auto-layout column widths. If the user manually
+        // resizes a column, auto-layout is disabled until the user resets it.
+        private bool _autoLayoutColumns = true;
+
+        private void OnConnectionColumnWidthChanged(object? sender, ColumnWidthChangedEventArgs e)
+        {
+            // User adjusted a column width; stop automatic layout so their preference sticks
+            _autoLayoutColumns = false;
+            try
+            {
+                // Persist the user's chosen widths
+                _settings.ColumnWidthName = colName.Width;
+                _settings.ColumnWidthHost = colHost.Width;
+                _settings.ColumnWidthDescription = colDescription.Width;
+                _settings.AutoLayoutColumns = false;
+                SaveSettings();
+            }
+            catch { }
+        }
+
         private static bool TrySplitHostPort(string input, out string host, out int? port)
         {
             host = input;
@@ -749,17 +890,14 @@ namespace RdpManager
 
         private void ToggleView(bool isList)
         {
-            _isListView = isList;
-            flowConnections.Visible = !isList;
-            lvConnections.Visible = isList;
+            // Always use list view
+            lvConnections.Visible = true;
             // update menu checks if menu exists
-            try { miViewButtons.Checked = !isList; miViewList.Checked = isList; } catch { }
+            try { miViewList.Checked = true; } catch { }
             // persist
-            _settings.IsListView = _isListView;
             SaveSettings();
             RenderConnections();
-            if (!isList) LayoutCards();
-            else LayoutListColumns();
+            LayoutListColumns();
         }
 
         private void SetSort(string field, bool asc)
@@ -809,13 +947,11 @@ namespace RdpManager
 
         private void ToggleViewMode(bool isList)
         {
-            _isListView = isList;
-            _settings.IsListView = _isListView;
+            // Always use list view - no toggling needed
             SaveSettings();
 
             // Update menu checks
-            try { miViewButtons.Checked = !_isListView; } catch { }
-            try { miViewList.Checked = _isListView; } catch { }
+            try { miViewList.Checked = true; } catch { }
 
             // Update the current tab's panel
             UpdateCurrentTabView();
@@ -828,14 +964,7 @@ namespace RdpManager
             {
                 var tabPanel = (Panel)tabControl.SelectedTab.Controls[0];
                 tabPanel.Controls.Clear();
-                if (_isListView)
-                {
-                    tabPanel.Controls.Add(lvConnections);
-                }
-                else
-                {
-                    tabPanel.Controls.Add(flowConnections);
-                }
+                tabPanel.Controls.Add(lvConnections);
             }
         }
 
@@ -893,7 +1022,6 @@ namespace RdpManager
         // Context actions for generic surface menu (operate on selected row in list view)
         private void ConnectSelectedIfAny()
         {
-            if (!_isListView) return;
             if (lvConnections.SelectedItems.Count == 0) return;
             var c = (Connection)lvConnections.SelectedItems[0].Tag!;
             LaunchRdp(c);
@@ -901,7 +1029,6 @@ namespace RdpManager
 
         private void EditSelectedIfAny()
         {
-            if (!_isListView) return;
             if (lvConnections.SelectedItems.Count == 0) return;
             var c = (Connection)lvConnections.SelectedItems[0].Tag!;
             EditConnection(c);
@@ -909,7 +1036,6 @@ namespace RdpManager
 
         private void CopySelectedIfAny()
         {
-            if (!_isListView) return;
             if (lvConnections.SelectedItems.Count == 0) return;
             var c = (Connection)lvConnections.SelectedItems[0].Tag!;
             CopyConnection(c);
@@ -917,64 +1043,88 @@ namespace RdpManager
 
         private void RemoveSelectedIfAny()
         {
-            if (!_isListView) return;
             if (lvConnections.SelectedItems.Count == 0) return;
             var c = (Connection)lvConnections.SelectedItems[0].Tag!;
             RemoveConnection(c);
         }
 
-        private void LayoutCards()
-        {
-            if (flowConnections == null) return;
-            if (flowConnections.Controls.Count == 0) return;
-            int client = flowConnections.ClientSize.Width - flowConnections.Padding.Left - flowConnections.Padding.Right;
-            if (client <= 0) return;
-
-            // Determine margins from first button
-            var first = flowConnections.Controls[0];
-            int mLeft = first.Margin.Left;
-            int mRight = first.Margin.Right;
-            int edge = mLeft + mRight; // total edge margins
-            int spacing = mLeft + mRight; // spacing between items (approx)
-
-            int minCardWidth = 75;
-            int inner = client - edge;
-            if (inner <= minCardWidth) inner = client; // fallback
-
-            int cols = Math.Max(1, (inner + spacing) / (minCardWidth + spacing));
-            int cardWidth = Math.Max(minCardWidth, (inner - (cols - 1) * spacing) / cols);
-
-            foreach (Control ctrl in flowConnections.Controls)
-            {
-                ctrl.Width = cardWidth;
-            }
-        }
-
         private void LayoutListColumns()
         {
             if (lvConnections == null) return;
+
             int total = lvConnections.ClientSize.Width;
             if (total <= 0) return;
-            // Leave a small buffer for vertical scrollbar and border
-            int buffer = 6;
-            total = Math.Max(0, total - buffer);
 
-            // Proportional widths: Name 45%, Host 55%, with sensible minimums
-            int nameMin = 150;
-            int hostMin = 200;
-            int nameWidth = Math.Max(nameMin, (int)(total * 0.45));
-            int hostWidth = Math.Max(hostMin, total - nameWidth);
+            total = Math.Max(0, total - 4); // small buffer
 
-            // If vertical scrollbar appears, Windows may reduce visible width; guard again
-            if (nameWidth + hostWidth > lvConnections.ClientSize.Width)
+            int nameMin = 120;
+            int hostMin = 140;
+            int descMin = 100;
+
+            if (_autoLayoutColumns)
             {
-                hostWidth = Math.Max(hostMin, lvConnections.ClientSize.Width - nameWidth - buffer);
+                int nameWidth = Math.Max(nameMin, (int)Math.Round(total * 0.25));
+                int hostWidth = Math.Max(hostMin, (int)Math.Round(total * 0.25));
+                int descWidth = Math.Max(0, total - nameWidth - hostWidth);
+
+                int overflow = (nameWidth + hostWidth + descWidth) - total;
+                if (overflow > 0)
+                {
+                    int cut = Math.Min(overflow, hostWidth - hostMin);
+                    hostWidth -= cut;
+                    overflow -= cut;
+
+                    if (overflow > 0)
+                    {
+                        cut = Math.Min(overflow, nameWidth - nameMin);
+                        nameWidth -= cut;
+                    }
+
+                    descWidth = Math.Max(0, total - nameWidth - hostWidth);
+                }
+
+                try
+                {
+                    colName.Width = nameWidth;
+                    colHost.Width = hostWidth;
+                    colDescription.Width = Math.Max(descMin, descWidth);
+                    // Ensure flush right
+                    colDescription.Width = Math.Max(0, total - colName.Width - colHost.Width);
+                }
+                catch { }
+
+                return;
             }
 
+            // Manual/saved mode: keep current widths, but never overflow and keep flush right.
             try
             {
-                colName.Width = nameWidth;
-                colHost.Width = hostWidth;
+                int currentSum = colName.Width + colHost.Width + colDescription.Width;
+                if (currentSum > total)
+                {
+                    int overflow = currentSum - total;
+
+                    int take = Math.Min(overflow, Math.Max(0, colDescription.Width - descMin));
+                    colDescription.Width -= take;
+                    overflow -= take;
+
+                    if (overflow > 0)
+                    {
+                        take = Math.Min(overflow, Math.Max(0, colHost.Width - hostMin));
+                        colHost.Width -= take;
+                        overflow -= take;
+                    }
+
+                    if (overflow > 0)
+                    {
+                        take = Math.Min(overflow, Math.Max(0, colName.Width - nameMin));
+                        colName.Width -= take;
+                        overflow -= take;
+                    }
+                }
+
+                // Always make Description fill remaining so right edge is flush
+                colDescription.Width = Math.Max(0, total - colName.Width - colHost.Width);
             }
             catch { }
         }
@@ -991,6 +1141,36 @@ namespace RdpManager
             if (string.IsNullOrWhiteSpace(result)) result = "RdpManager";
             // Avoid extremely long filenames
             return result.Length > 100 ? result.Substring(0, 100) : result;
+        }
+
+        private void ApplyInitialColumnWidths()
+        {
+            // If we have sane saved widths, use them. Otherwise fall back to percentage.
+            if (_settings.ColumnWidthName is int savedName && savedName > 0
+                && _settings.ColumnWidthHost is int savedHost && savedHost > 0
+                && _settings.ColumnWidthDescription is int savedDescription && savedDescription > 0)
+            {
+                try
+                {
+                    colName.Width = savedName;
+                    colHost.Width = savedHost;
+                    colDescription.Width = savedDescription;
+                    _autoLayoutColumns = false;
+                    _settings.AutoLayoutColumns = false;
+                    SaveSettings();
+                }
+                catch { }
+            }
+            else
+            {
+                _autoLayoutColumns = true;
+                _settings.AutoLayoutColumns = true;
+                // Layout will compute percentages
+                LayoutListColumns();
+            }
+
+            // Make sure it fits the current control width
+            try { LayoutListColumns(); } catch { }
         }
     }
 }
