@@ -32,10 +32,9 @@ publish:
 
 release: publish
 	@echo "Creating and pushing version tag v$(VERSION)"
-	-git tag -a v$(VERSION) -m "Release version $(VERSION)"
-	-git push origin main
-	-git push origin v$(VERSION)
-	@echo "Note: Git commands may have failed if git is not available in this environment"
+	git tag -a v$(VERSION) -m "Release version $(VERSION)"
+	git push origin main
+	git push origin v$(VERSION)
 
 clean:
 	$(DOTNET) clean $(PROJECT)
